@@ -1,0 +1,62 @@
+name: "HQ-to-Tencent China IaC Pipeline"
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  push:
+    branches: [ "main" ]
+
+env:
+  TENCENTCLOUD_SECRET_ID: ${{ secrets.TENCENTCLOUD_SECRET_ID }}
+  TENCENTCLOUD_SECRET_KEY: ${{ secrets.TENCENTCLOUD_SECRET_KEY }}
+  TF_VAR_tencent_appid: ${{ secrets.TENCENTCLOUD_APPID }}
+
+jobs:
+  policy-verification:
+    name: "Policy & Compliance Check"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.0
+
+      - name: Terraform Init
+        working-directory: ./terraform
+        run: terraform init
+
+      - name: Generate Terraform Execution Plan
+        working-directory: ./terraform
+        run: |
+          terraform plan -out=tfplan.binary
+          terraform show -json tfplan.binary > tfplan.json
+
+      - name: Run Checkov Policy as Code
+        uses: bridgecrewio/checkov-action@master
+        with:
+          config_file: .checkov.yml
+          file: ./terraform/tfplan.json
+          framework: terraform_plan
+
+  deploy-to-tencent:
+    name: "Deploy to Tencent Cloud China"
+    needs: policy-verification
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.8.0
+
+      - name: Terraform Init & Apply
+        working-directory: ./terraform
+        run: |
+          terraform init
+          terraform apply -auto-approve
