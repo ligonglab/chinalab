@@ -1,0 +1,7 @@
+framework:
+  - terraform_plan
+compact: true
+quiet: false
+soft-fail: false
+output: cli
+download-external-modules: false
